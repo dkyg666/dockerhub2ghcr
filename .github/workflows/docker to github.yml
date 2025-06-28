@@ -42,16 +42,34 @@ jobs:
         run: echo "ACTOR_LOWER=$(echo '${{ github.actor }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: 处理多个标签
+        id: process-tags
         run: |
-          # 将逗号分隔的标签转换为数组
-          TAGS_ARR=($(echo "${{ inputs.tags }}" | tr ',' ' '))
-          # 转换为JSON格式并存入环境变量
-          echo "TAGS_JSON=$(printf '%s\n' "${TAGS_ARR[@]}" | jq -R . | jq -s .)" >> $GITHUB_ENV
+          # 清理标签字符串，移除空格和引号
+          CLEAN_TAGS=$(echo "${{ inputs.tags }}" | tr -d "'\"" | tr ',' '\n' | sed 's/^ *//;s/ *$//')
+          
+          # 将标签存入数组
+          TAG_ARRAY=()
+          while read -r TAG; do
+            if [ -n "$TAG" ]; then
+              TAG_ARRAY+=("$TAG")
+            fi
+          done <<< "$CLEAN_TAGS"
+          
+          # 输出为多行字符串
+          echo "TAGS<<EOF" >> $GITHUB_OUTPUT
+          printf "%s\n" "${TAG_ARRAY[@]}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "处理的标签列表:"
+          printf " - %s\n" "${TAG_ARRAY[@]}"
 
       - name: 拉取并推送镜像
         run: |
-          # 读取标签数组
-          TAGS=$(echo '${{ env.TAGS_JSON }}' | jq -r '.[]')
+          # 读取处理后的标签
+          TAGS="${{ steps.process-tags.outputs.TAGS }}"
+          
+          echo "开始处理以下标签:"
+          echo "$TAGS"
           
           for TAG in $TAGS; do
             echo "正在处理标签: $TAG"

@@ -1,4 +1,4 @@
-name: 将DockerHub镜像
+name: 转移DockerHub镜像仓库
 
 permissions: write-all        
 

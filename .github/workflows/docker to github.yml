@@ -1,4 +1,4 @@
-name: 将DockerHub镜像同步到GHCR.IO
+name: 将DockerHub镜像
 
 permissions: write-all        
 

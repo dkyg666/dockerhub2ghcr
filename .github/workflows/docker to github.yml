@@ -1,0 +1,72 @@
+name: 将DockerHub镜像复制到GHCR.IO（仅x86架构）
+
+permissions: write-all        
+
+on:
+  workflow_dispatch:
+    inputs:
+      dockerhub_image:
+        description: '要拉取的 DockerHub 镜像名称'
+        required: true
+        default: 'nginx'
+      tags:
+        description: '要复制的Docker镜像标签（多个标签用逗号分隔，默认：latest）'
+        required: false
+        default: 'latest'
+      ghcr_image:
+        description: '推送到GHCR.IO的镜像名称'
+        required: true
+        default: 'myimage'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ inputs.ghcr_image }}
+  PLATFORM: linux/amd64  # 明确指定x86架构
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 登录到GitHub容器注册表
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}  
+          password: ${{ secrets.GITHUB_TOKEN }} 
+
+      - name: 设置小写的 GitHub 用户名
+        run: echo "ACTOR_LOWER=$(echo '${{ github.actor }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: 处理多个标签
+        id: split_tags
+        run: |
+          # 将输入的标签字符串分割为数组
+          TAGS_STRING="${{ inputs.tags }}"
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS_STRING"
+          
+          # 准备JSON格式的输出
+          JSON_TAGS=$(printf '%s\n' "${TAG_ARRAY[@]}" | jq -R . | jq -s .)
+          echo "tags=${JSON_TAGS}" >> $GITHUB_OUTPUT
+          echo "共有 ${#TAG_ARRAY[@]} 个标签需要处理"
+
+      - name: 拉取并推送x86架构的多个版本镜像
+        run: |
+          # 从步骤输出中获取标签数组
+          TAGS=${{ steps.split_tags.outputs.tags }}
+          TAGS_ARRAY=$(echo "$TAGS" | jq -r '.[]')
+          
+          for TAG in $TAGS_ARRAY; do
+            echo "正在处理x86架构的标签: $TAG"
+            
+            # 从DockerHub拉取指定架构的镜像
+            docker pull --platform ${{ env.PLATFORM }} ${{ inputs.dockerhub_image }}:$TAG
+            
+            # 为GitHub容器注册表标记镜像
+            docker tag ${{ inputs.dockerhub_image }}:$TAG ${{ env.REGISTRY }}/${{ env.ACTOR_LOWER }}/${{ env.IMAGE_NAME }}:$TAG
+            
+            # 推送到GitHub容器注册表
+            docker push ${{ env.REGISTRY }}/${{ env.ACTOR_LOWER }}/${{ env.IMAGE_NAME }}:$TAG
+            
+            echo "成功推送x86架构的标签: $TAG"
+          done

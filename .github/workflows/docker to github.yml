@@ -1,4 +1,4 @@
-name: 转移DockerHub镜像仓库
+name: New将DockerHub镜像复制到GHCR.IO
 
 permissions: write-all        
 
